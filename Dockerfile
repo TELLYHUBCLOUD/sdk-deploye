@@ -1,5 +1,4 @@
-FROM irisxdr/neo-wzml:latest
-
+FROM tellyhubcloud/mltbsdk:latest
 WORKDIR /usr/src/app
 
 COPY requirements.txt .
