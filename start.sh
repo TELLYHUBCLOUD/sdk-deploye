@@ -1,5 +1,1 @@
-#!/usr/bin/env bash
-set -euo pipefail
-
-source .venv/bin/activate
-python3 update.py && python3 -m bot
+source .venv/bin/activate && python3 update.py && python3 -m bot
