@@ -3,10 +3,9 @@ WORKDIR /usr/src/app
 
 COPY requirements.txt .
 
-# Existing venv ko clear karke recreate karo
-RUN uv venv --clear /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-RUN uv pip install -r requirements.txt
+RUN uv venv --clear /usr/src/app/.venv
+ENV PATH="/usr/src/app/.venv/bin:$PATH"
+RUN uv pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
