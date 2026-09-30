@@ -1,4 +1,4 @@
-FROM tellyhubcloud/mltbsdk:latest
+FROM tellyhubcloud/telly-wzml:latest
 WORKDIR /usr/src/app
 
 COPY requirements.txt .
