@@ -106,12 +106,17 @@ class HerokuPolicyPatchTests(unittest.TestCase):
             (package_dir / "__init__.py").write_text("", encoding="utf-8")
         if layout == "bot":
             (root / "bot" / "__init__.py").write_text(
-                'from os import getcwd\\n'
-                'import logging\\n'
-                'class BinConfig: QBIT_NAME = "tellybit"\\n'
-                'LOGGER = logging.getLogger(__name__)\\n'
-                'def srun(*args, **kwargs): raise AssertionError("qBittorrent must not start in Heroku mode")\\n'
-                'srun([BinConfig.QBIT_NAME, "-d", f"--profile={getcwd()}"], check=False)\\n',
+                "\\n".join(
+                    (
+                        "from os import getcwd",
+                        "import logging",
+                        'class BinConfig: QBIT_NAME = "tellybit"',
+                        "LOGGER = logging.getLogger(__name__)",
+                        'def srun(*args, **kwargs): raise AssertionError("qBittorrent must not start in Heroku mode")',
+                        'srun([BinConfig.QBIT_NAME, "-d", f"--profile={getcwd()}"], check=False)',
+                        "",
+                    )
+                ),
                 encoding="utf-8",
             )
         return config_path, filters_path
