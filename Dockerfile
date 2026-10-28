@@ -2,6 +2,10 @@ FROM tellyhubcloud/mltbsdk:latest
 
 WORKDIR /usr/src/app
 
+# The SDK base image defaults to an unprivileged app user. Build-time
+# environment creation and installing pinned dependencies require root.
+USER root
+
 COPY requirements.txt /usr/src/app/requirements.txt
 
 # Keep an explicit virtual environment and make uv/python resolve to it.
@@ -23,5 +27,9 @@ RUN chmod 0755 \
     /usr/local/bin/telly-entrypoint.sh \
     /usr/local/bin/telly-updater.py \
     /usr/local/bin/heroku_policy_patch.py
+
+# Keep the normal local-Docker default unprivileged. Heroku runs the container
+# under its own arbitrary non-root UID regardless of this directive.
+USER app
 
 CMD ["bash", "/usr/local/bin/telly-entrypoint.sh"]
