@@ -172,17 +172,41 @@ except ValueError as exc:
     print(f"[heroku-policy] ERROR: {exc}; refusing to start.", file=sys.stderr)
     raise SystemExit(78)
 
-# Validate both modified files before writing either one.
+# qBittorrent is launched during package import in some legacy bot layouts,
+# before Config has loaded. Do not start the torrent daemon at all in Heroku
+# policy mode; the guard must work even before Config exists.
+bot_init_path = Path("bot/__init__.py")
+bot_init_source = None
+qbit_start = 'srun([BinConfig.QBIT_NAME, "-d", f"--profile={getcwd()}"], check=False)'
+if bot_init_path.is_file():
+    bot_init_source = bot_init_path.read_text(encoding="utf-8")
+    qbit_marker = "# BEGIN TELLY_HEROKU_SKIP_QBIT (managed by sdk-deploye)"
+    if qbit_marker not in bot_init_source and qbit_start in bot_init_source:
+        qbit_replacement = '''# BEGIN TELLY_HEROKU_SKIP_QBIT (managed by sdk-deploye)
+import os as _telly_qbit_os
+_telly_qbit_mode = _telly_qbit_os.environ.get("HEROKU_POLICY_MODE", "").strip().lower()
+if not _telly_qbit_os.environ.get("DYNO") and _telly_qbit_mode not in ("1", "true", "yes", "on"):
+    srun([BinConfig.QBIT_NAME, "-d", f"--profile={getcwd()}"], check=False)
+else:
+    LOGGER.warning("Heroku safety mode: qBittorrent daemon startup skipped.")
+# END TELLY_HEROKU_SKIP_QBIT'''
+        bot_init_source = bot_init_source.replace(qbit_start, qbit_replacement, 1)
+
+# Validate all modified files before writing any of them.
 try:
     compile(config_source, str(config_path), "exec")
     compile(filter_source, str(filters_path), "exec")
+    if bot_init_source is not None:
+        compile(bot_init_source, str(bot_init_path), "exec")
 except SyntaxError as exc:
     print(f"[heroku-policy] ERROR: generated guard has invalid syntax: {exc}", file=sys.stderr)
     raise SystemExit(78)
 
 config_path.write_text(config_source, encoding="utf-8")
 filters_path.write_text(filter_source, encoding="utf-8")
+if bot_init_source is not None:
+    bot_init_path.write_text(bot_init_source, encoding="utf-8")
 print(
-    f"[heroku-policy] applied guarded settings to {config_path} and "
-    f"owner-only authorization to {filters_path}"
+    f"[heroku-policy] applied guarded settings to {config_path}, owner-only "
+    f"authorization to {filters_path}, and torrent-start guard where supported"
 )
