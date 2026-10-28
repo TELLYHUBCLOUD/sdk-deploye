@@ -75,20 +75,35 @@ class CustomFilters:
 
 
 class HerokuPolicyPatchTests(unittest.TestCase):
-    def _fixture(self, root):
-        config_path = root / "bot" / "core" / "config_manager.py"
+    def _fixture(self, root, layout="bot"):
+        if layout == "bot":
+            config_path = root / "bot" / "core" / "config_manager.py"
+            filters_path = root / "bot" / "helper" / "telegram_helper" / "filters.py"
+            config_import = "from bot.core.config_manager import Config"
+            package_dirs = (
+                root / "bot",
+                root / "bot" / "core",
+                root / "bot" / "helper",
+                root / "bot" / "helper" / "telegram_helper",
+            )
+        else:
+            config_path = root / "app" / "core" / "config_loader.py"
+            filters_path = root / "app" / "telegram" / "filters.py"
+            config_import = "from app.core.config_loader import Config"
+            package_dirs = (
+                root / "app",
+                root / "app" / "core",
+                root / "app" / "telegram",
+            )
         config_path.parent.mkdir(parents=True)
         config_path.write_text(FIXTURE_CONFIG, encoding="utf-8")
-        filters_path = root / "bot" / "helper" / "telegram_helper" / "filters.py"
         filters_path.parent.mkdir(parents=True)
-        filters_path.write_text(FIXTURE_FILTERS, encoding="utf-8")
-        for init_path in (
-            root / "bot" / "__init__.py",
-            root / "bot" / "core" / "__init__.py",
-            root / "bot" / "helper" / "__init__.py",
-            root / "bot" / "helper" / "telegram_helper" / "__init__.py",
-        ):
-            init_path.write_text("", encoding="utf-8")
+        filters_path.write_text(
+            FIXTURE_FILTERS.replace("from bot.core.config_manager import Config", config_import),
+            encoding="utf-8",
+        )
+        for package_dir in package_dirs:
+            (package_dir / "__init__.py").write_text("", encoding="utf-8")
         return config_path, filters_path
 
     def test_no_patch_outside_heroku_mode(self):
@@ -111,6 +126,30 @@ class HerokuPolicyPatchTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(config_path.read_text(encoding="utf-8"), before_config)
             self.assertEqual(filters_path.read_text(encoding="utf-8"), before_filters)
+
+    def test_app_layout_is_supported(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            config_path, filters_path = self._fixture(root, layout="app")
+            env = os.environ.copy()
+            env["HEROKU_POLICY_MODE"] = "1"
+            env.pop("DYNO", None)
+            result = subprocess.run(
+                [sys.executable, str(PATCHER)],
+                cwd=root,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            config_source = config_path.read_text(encoding="utf-8")
+            filter_source = filters_path.read_text(encoding="utf-8")
+            self.assertIn("BEGIN TELLY_HEROKU_POLICY_GUARD", config_source)
+            self.assertIn("BEGIN TELLY_HEROKU_OWNER_ONLY_AUTHORIZED_USER", filter_source)
+            self.assertIn("BEGIN TELLY_HEROKU_OWNER_ONLY_SUDO_USER", filter_source)
+            compile(config_source, str(config_path), "exec")
+            compile(filter_source, str(filters_path), "exec")
 
     def test_heroku_mode_blocks_config_overrides_and_non_owner_access(self):
         with tempfile.TemporaryDirectory() as temp:
