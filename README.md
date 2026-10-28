@@ -54,7 +54,9 @@ This repository's image fetches the selected bot source at startup. On Heroku, t
 
 These restrictions are intentional and can disable much of the mirror/leech functionality. Use the service only for content you own or have explicit permission to access and redistribute; do not operate an unauthenticated proxy, distribute infringing material, or scrape sites contrary to their terms or `robots.txt`. A code patch cannot reverse an account suspension and is not a guarantee that Heroku permits the remaining service. **Do not redeploy to Heroku until Heroku Support has reviewed the specific use case and confirmed it is permitted.**
 
-The Docker build keeps its trusted startup helpers in `/usr/local/bin` and fetches the bot into the writable, ephemeral `/tmp/telly-runtime` directory. This avoids resetting root-owned image files when Heroku starts the container under an arbitrary non-root UID. Runtime package upgrades are disabled in Heroku mode so persisted MongoDB settings cannot silently trigger unreviewed dependency changes.
+The Docker build keeps its trusted startup helpers in `/usr/local/bin` and fetches the bot into the writable, ephemeral `/tmp/telly-runtime` directory. This avoids resetting root-owned image files when Heroku starts the container under an arbitrary non-root UID. Runtime package upgrades are disabled in Heroku mode, and the upstream source cannot be overridden by MongoDB settings.
+
+For Heroku mode, set both `UPSTREAM_REPO` and `UPSTREAM_BRANCH` as explicit Config Vars. `UPSTREAM_REPO` must be an HTTPS GitHub repository URL, and `UPSTREAM_BRANCH` must name the exact branch to run. The dyno refuses to start if either value is missing or invalid rather than silently trusting a database-stored source.
 
 ---
 
