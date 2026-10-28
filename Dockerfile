@@ -26,7 +26,8 @@ COPY heroku_policy_patch.py /usr/local/bin/heroku_policy_patch.py
 RUN chmod 0755 \
     /usr/local/bin/telly-entrypoint.sh \
     /usr/local/bin/telly-updater.py \
-    /usr/local/bin/heroku_policy_patch.py
+    /usr/local/bin/heroku_policy_patch.py && \
+    chown -R app:app /opt/venv
 
 # Keep the normal local-Docker default unprivileged. Heroku runs the container
 # under its own arbitrary non-root UID regardless of this directive.
