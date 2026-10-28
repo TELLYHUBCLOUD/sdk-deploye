@@ -106,7 +106,7 @@ class HerokuPolicyPatchTests(unittest.TestCase):
             (package_dir / "__init__.py").write_text("", encoding="utf-8")
         if layout == "bot":
             (root / "bot" / "__init__.py").write_text(
-                "\\n".join(
+                "\n".join(
                     (
                         "from os import getcwd",
                         "import logging",
