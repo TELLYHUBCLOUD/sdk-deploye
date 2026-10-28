@@ -7,6 +7,7 @@ COPY requirements.txt /usr/src/app/requirements.txt
 # Keep an explicit virtual environment and make uv/python resolve to it.
 RUN uv venv --clear /opt/venv
 ENV VIRTUAL_ENV=/opt/venv \
+    PYTHONPATH=/usr/src/app \
     PATH="/opt/venv/bin:$PATH"
 
 RUN uv pip install --python /opt/venv/bin/python --no-cache-dir -r /usr/src/app/requirements.txt
