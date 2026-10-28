@@ -54,7 +54,7 @@ This repository's image fetches the selected bot source at startup. On Heroku, t
 
 These restrictions are intentional and can disable much of the mirror/leech functionality. Use the service only for content you own or have explicit permission to access and redistribute; do not operate an unauthenticated proxy, distribute infringing material, or scrape sites contrary to their terms or `robots.txt`. A code patch cannot reverse an account suspension and is not a guarantee that Heroku permits the remaining service. **Do not redeploy to Heroku until Heroku Support has reviewed the specific use case and confirmed it is permitted.**
 
-The Docker build also keeps its trusted startup helpers outside the app directory because the runtime updater resets that directory to the configured upstream branch. Runtime package upgrades are disabled in Heroku mode so persisted MongoDB settings cannot silently trigger unreviewed dependency changes.
+The Docker build keeps its trusted startup helpers in `/usr/local/bin` and fetches the bot into the writable, ephemeral `/tmp/telly-runtime` directory. This avoids resetting root-owned image files when Heroku starts the container under an arbitrary non-root UID. Runtime package upgrades are disabled in Heroku mode so persisted MongoDB settings cannot silently trigger unreviewed dependency changes.
 
 ---
 
