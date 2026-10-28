@@ -85,6 +85,18 @@ if DATABASE_URL := config_file.get("DATABASE_URL", "").strip():
     except Exception as e:
         log_error(f"Database ERROR: {e}")
 
+# Database settings can otherwise set UPDATE_PKGS=True and install arbitrary
+# newer package versions every boot. Keep the selected source fetch (the bot is
+# not baked into this wrapper image), but do not mutate Python dependencies on
+# Heroku. The policy patch is applied by the entrypoint after source fetch.
+heroku_policy_mode = bool(environ.get("DYNO")) or environ.get(
+    "HEROKU_POLICY_MODE", ""
+).strip().lower() in ("1", "true", "yes", "on")
+if heroku_policy_mode:
+    if config_file.get("UPDATE_PKGS"):
+        log_info("Heroku safety mode: runtime package upgrades are disabled.")
+    config_file["UPDATE_PKGS"] = False
+
 UPSTREAM_REPO = config_file.get("UPSTREAM_REPO", "").strip()
 UPSTREAM_BRANCH = config_file.get("UPSTREAM_BRANCH", "").strip() or "master"
 
