@@ -48,6 +48,16 @@
 
 ---
 
+## Heroku policy mode and deployment limitations
+
+This repository's image fetches the selected bot source at startup. On Heroku, the trusted entrypoint now enables `HEROKU_POLICY_MODE`, disables runtime package upgrades, and applies a fail-closed guard **after** the upstream source is fetched and before the bot starts. The guard disables torrent/seed/leech, automated mirror/leech, torrent-indexer search, public Rclone HTTP serving, external resolver endpoints, and public chat/SUDO allowlists; it also applies small task/queue limits. The guard aborts startup if it cannot find a supported configuration module.
+
+These restrictions are intentional and can disable much of the mirror/leech functionality. Use the service only for content you own or have explicit permission to access and redistribute; do not operate an unauthenticated proxy, distribute infringing material, or scrape sites contrary to their terms or `robots.txt`. A code patch cannot reverse an account suspension and is not a guarantee that Heroku permits the remaining service. **Do not redeploy to Heroku until Heroku Support has reviewed the specific use case and confirmed it is permitted.**
+
+The Docker build also keeps its trusted startup helpers outside the app directory because the runtime updater resets that directory to the configured upstream branch. Runtime package upgrades are disabled in Heroku mode so persisted MongoDB settings cannot silently trigger unreviewed dependency changes.
+
+---
+
 ## ⚙️ Configuration
 
 All configuration is done via `config.env` (or environment variables). See `config_sample.py` for all options and detailed comments.
