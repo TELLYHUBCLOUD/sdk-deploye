@@ -60,9 +60,9 @@ if [[ "${HEROKU_POLICY_MODE:-0}" == "1" ]]; then
 fi
 
 # Support the two bot layouts that this deployment wrapper may fetch.
-if [[ -f /usr/src/app/app/main.py ]]; then
+if [[ -f "$RUNTIME_DIR/app/main.py" ]]; then
     exec python3 -m app.main
-elif [[ -f /usr/src/app/bot/__main__.py ]]; then
+elif [[ -f "$RUNTIME_DIR/bot/__main__.py" ]]; then
     exec python3 -m bot
 else
     echo "[entrypoint] ERROR: no supported app/main.py or bot/__main__.py found." >&2
