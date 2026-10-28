@@ -104,6 +104,16 @@ class HerokuPolicyPatchTests(unittest.TestCase):
         )
         for package_dir in package_dirs:
             (package_dir / "__init__.py").write_text("", encoding="utf-8")
+        if layout == "bot":
+            (root / "bot" / "__init__.py").write_text(
+                'from os import getcwd\\n'
+                'import logging\\n'
+                'class BinConfig: QBIT_NAME = "tellybit"\\n'
+                'LOGGER = logging.getLogger(__name__)\\n'
+                'def srun(*args, **kwargs): raise AssertionError("qBittorrent must not start in Heroku mode")\\n'
+                'srun([BinConfig.QBIT_NAME, "-d", f"--profile={getcwd()}"], check=False)\\n',
+                encoding="utf-8",
+            )
         return config_path, filters_path
 
     def test_no_patch_outside_heroku_mode(self):
@@ -172,6 +182,10 @@ class HerokuPolicyPatchTests(unittest.TestCase):
             patched_filters = filters_path.read_text(encoding="utf-8")
             self.assertIn("BEGIN TELLY_HEROKU_POLICY_GUARD", patched_config)
             self.assertIn("BEGIN TELLY_HEROKU_OWNER_ONLY_AUTHORIZED_USER", patched_filters)
+            bot_init_path = root / "bot" / "__init__.py"
+            patched_bot_init = bot_init_path.read_text(encoding="utf-8")
+            self.assertIn("BEGIN TELLY_HEROKU_SKIP_QBIT", patched_bot_init)
+            compile(patched_bot_init, str(bot_init_path), "exec")
             self.assertIn("BEGIN TELLY_HEROKU_OWNER_ONLY_SUDO_USER", patched_filters)
             compile(patched_config, str(config_path), "exec")
             compile(patched_filters, str(filters_path), "exec")
