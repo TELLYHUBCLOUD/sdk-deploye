@@ -104,7 +104,7 @@ if heroku_policy_mode:
 
     trusted_repo = environ.get("UPSTREAM_REPO", "").strip()
     trusted_branch = environ.get("UPSTREAM_BRANCH", "").strip()
-    repo_pattern = r"https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\\.git)?/?"
+    repo_pattern = r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\.git)?/?"
     branch_pattern = r"[A-Za-z0-9][A-Za-z0-9._/-]{0,99}"
     if not trusted_repo or not re.fullmatch(repo_pattern, trusted_repo):
         log_error(
