@@ -12,10 +12,9 @@ ENV VIRTUAL_ENV=/opt/venv \
 
 RUN uv pip install --python /opt/venv/bin/python --no-cache-dir -r /usr/src/app/requirements.txt
 
-COPY . /usr/src/app
-
-# Runtime updater resets /usr/src/app to a selected upstream branch. Keep the
-# trusted entrypoint, updater, and policy patcher outside that mutable tree.
+# Keep the wrapper's helpers outside the bot checkout. The entrypoint
+# fetches the selected upstream source into /tmp/telly-runtime at startup.
+# Do not COPY the wrapper repository into the bot's writable runtime tree.
 COPY start.sh /usr/local/bin/telly-entrypoint.sh
 COPY update.py /usr/local/bin/telly-updater.py
 COPY heroku_policy_patch.py /usr/local/bin/heroku_policy_patch.py
