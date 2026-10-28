@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Apply a transparent, fail-closed Heroku policy guard to the fetched bot.
+"""Apply a transparent, fail-closed Heroku policy guard to fetched bot source.
 
-The deployment wrapper fetches its bot source at startup. This small patcher
-runs after that fetch and before the bot starts, so upstream files or persisted
-MongoDB settings cannot silently re-enable high-risk features on Heroku.
+The deployment wrapper fetches the selected upstream bot at startup. This
+patcher runs after that fetch and before the bot starts, so persisted settings
+cannot silently re-enable high-risk features or public command authorization.
 """
 
 from os import environ
@@ -15,12 +15,12 @@ mode = environ.get("HEROKU_POLICY_MODE", "").strip().lower()
 if not environ.get("DYNO") and mode not in MODE_VALUES:
     raise SystemExit(0)
 
-targets = (
-    Path("bot/core/config_manager.py"),
-    Path("app/core/config_loader.py"),
+LAYOUTS = (
+    (Path("bot/core/config_manager.py"), Path("bot/helper/telegram_helper/filters.py")),
+    (Path("app/core/config_loader.py"), Path("app/telegram/filters.py")),
 )
-target = next((candidate for candidate in targets if candidate.is_file()), None)
-if target is None:
+layout = next(((config, filters) for config, filters in LAYOUTS if config.is_file()), None)
+if layout is None:
     print(
         "[heroku-policy] ERROR: no supported Config module found; refusing to "
         "start without the safety guard.",
@@ -28,27 +28,32 @@ if target is None:
     )
     raise SystemExit(78)
 
-source = target.read_text(encoding="utf-8")
-marker = "# BEGIN TELLY_HEROKU_POLICY_GUARD (managed by sdk-deploye)"
-if marker in source:
-    print(f"[heroku-policy] guard already installed in {target}")
-    raise SystemExit(0)
+config_path, filters_path = layout
+if not filters_path.is_file():
+    print(
+        f"[heroku-policy] ERROR: expected authorization filter {filters_path} "
+        "is missing; refusing to start without owner-only authorization.",
+        file=sys.stderr,
+    )
+    raise SystemExit(78)
 
+config_source = config_path.read_text(encoding="utf-8")
+config_marker = "# BEGIN TELLY_HEROKU_POLICY_GUARD (managed by sdk-deploye)"
 required = ("class Config:", "def set(", "def load(", "def load_dict(")
-missing = [item for item in required if item not in source]
+missing = [item for item in required if item not in config_source]
 if missing:
     print(
-        f"[heroku-policy] ERROR: unsupported Config module {target}; missing "
+        f"[heroku-policy] ERROR: unsupported Config module {config_path}; missing "
         f"{', '.join(missing)}. Refusing to start.",
         file=sys.stderr,
     )
     raise SystemExit(78)
 
-guard = r'''
+config_guard = r'''
 
 # BEGIN TELLY_HEROKU_POLICY_GUARD (managed by sdk-deploye)
-# This is intentionally visible in the runtime source and re-applied after
-# config.py, environment variables, database settings, and bot-setting writes.
+# Re-applied after config.py, environment variables, database settings, and
+# bot-setting writes. This is a risk-reduction mode, not policy approval.
 def _telly_heroku_policy_enforce(cls):
     import os as _telly_os
     mode = _telly_os.environ.get("HEROKU_POLICY_MODE", "").strip().lower()
@@ -126,5 +131,58 @@ Config.load_dict = classmethod(_telly_policy_config_load_dict)
 _telly_heroku_policy_enforce(Config)
 # END TELLY_HEROKU_POLICY_GUARD
 '''
-target.write_text(source.rstrip() + "\n" + guard.lstrip("\n") + "\n", encoding="utf-8")
-print(f"[heroku-policy] applied fail-closed guard to {target}")
+if config_marker not in config_source:
+    config_source = config_source.rstrip() + "\n" + config_guard.lstrip("\n") + "\n"
+
+filter_source = filters_path.read_text(encoding="utf-8")
+if not all(
+    f"async def {method}(self, _, update):" in filter_source
+    for method in ("authorized_user", "sudo_user")
+):
+    print(
+        f"[heroku-policy] ERROR: unsupported authorization filter {filters_path}; "
+        "owner-only guard could not be applied. Refusing to start.",
+        file=sys.stderr,
+    )
+    raise SystemExit(78)
+
+def add_owner_only_guard(source, method):
+    marker = f"# BEGIN TELLY_HEROKU_OWNER_ONLY_{method.upper()}"
+    if marker in source:
+        return source
+    signature = f"    async def {method}(self, _, update):\n"
+    addition = (
+        signature
+        + f"        {marker}\n"
+        + "        import os as _telly_auth_os\n"
+        + "        _telly_auth_mode = _telly_auth_os.environ.get(\"HEROKU_POLICY_MODE\", \"\").strip().lower()\n"
+        + "        if _telly_auth_os.environ.get(\"DYNO\") or _telly_auth_mode in (\"1\", \"true\", \"yes\", \"on\"):\n"
+        + "            _telly_auth_user = update.from_user or update.sender_chat\n"
+        + "            return bool(_telly_auth_user and _telly_auth_user.id == Config.OWNER_ID)\n"
+        + f"        # END TELLY_HEROKU_OWNER_ONLY_{method.upper()}\n"
+    )
+    if signature not in source:
+        raise ValueError(f"method signature missing: {method}")
+    return source.replace(signature, addition, 1)
+
+try:
+    filter_source = add_owner_only_guard(filter_source, "authorized_user")
+    filter_source = add_owner_only_guard(filter_source, "sudo_user")
+except ValueError as exc:
+    print(f"[heroku-policy] ERROR: {exc}; refusing to start.", file=sys.stderr)
+    raise SystemExit(78)
+
+# Validate both modified files before writing either one.
+try:
+    compile(config_source, str(config_path), "exec")
+    compile(filter_source, str(filters_path), "exec")
+except SyntaxError as exc:
+    print(f"[heroku-policy] ERROR: generated guard has invalid syntax: {exc}", file=sys.stderr)
+    raise SystemExit(78)
+
+config_path.write_text(config_source, encoding="utf-8")
+filters_path.write_text(filter_source, encoding="utf-8")
+print(
+    f"[heroku-policy] applied guarded settings to {config_path} and "
+    f"owner-only authorization to {filters_path}"
+)
