@@ -97,6 +97,40 @@ if heroku_policy_mode:
         log_info("Heroku safety mode: runtime package upgrades are disabled.")
     config_file["UPDATE_PKGS"] = False
 
+    # MongoDB settings must never select or replace the code executed by a
+    # Heroku dyno. Require an explicit HTTPS GitHub source and branch in config
+    # vars, then overwrite any DB-provided values with those trusted env values.
+    import re
+
+    trusted_repo = environ.get("UPSTREAM_REPO", "").strip()
+    trusted_branch = environ.get("UPSTREAM_BRANCH", "").strip()
+    repo_pattern = r"https://github\\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+(?:\\.git)?/?"
+    branch_pattern = r"[A-Za-z0-9][A-Za-z0-9._/-]{0,99}"
+    if not trusted_repo or not re.fullmatch(repo_pattern, trusted_repo):
+        log_error(
+            "Heroku safety mode requires UPSTREAM_REPO to be an HTTPS GitHub "
+            "repository URL. Set the config var explicitly; refusing to use a "
+            "MongoDB-provided source."
+        )
+        exit(78)
+    if (
+        not trusted_branch
+        or not re.fullmatch(branch_pattern, trusted_branch)
+        or ".." in trusted_branch
+        or "//" in trusted_branch
+        or trusted_branch.endswith("/")
+        or trusted_branch.endswith(".lock")
+    ):
+        log_error(
+            "Heroku safety mode requires a valid UPSTREAM_BRANCH config var. "
+            "Set the config var explicitly; refusing to use a MongoDB-provided branch."
+        )
+        exit(78)
+
+    config_file["UPSTREAM_REPO"] = trusted_repo
+    config_file["UPSTREAM_BRANCH"] = trusted_branch
+    log_info("Heroku safety mode: using only the explicit GitHub source and branch.")
+
 UPSTREAM_REPO = config_file.get("UPSTREAM_REPO", "").strip()
 UPSTREAM_BRANCH = config_file.get("UPSTREAM_BRANCH", "").strip() or "master"
 
