@@ -38,10 +38,17 @@ if [[ -n "${DYNO:-}" ]] || [[ "${HEROKU_POLICY_MODE:-}" =~ ^(1|true|yes|on)$ ]];
     echo "[entrypoint] Heroku policy safety mode enabled; high-risk features restricted."
 fi
 
-cd /usr/src/app
+# Fetch and run the bot in a fresh, writable runtime directory. The SDK
+# base image deliberately protects /usr/src/app with ownership/mode settings;
+# Heroku uses an arbitrary non-root UID, so do not git-reset source over image
+# files there. /tmp is ephemeral on Heroku and the runtime UID owns this tree.
+RUNTIME_DIR=/tmp/telly-runtime
+mkdir -p "$RUNTIME_DIR"
+cd "$RUNTIME_DIR"
+export PYTHONPATH="$RUNTIME_DIR:/usr/src/app"
 
 # The Dockerfile creates /opt/venv and puts it first on PATH. Do not source
-# .venv: this wrapper's existing Dockerfile did not create that directory.
+# .venv: this wrapper's Dockerfile creates /opt/venv instead.
 UPDATER=/usr/local/bin/telly-updater.py
 [[ -f "$UPDATER" ]] || UPDATER=/usr/src/app/update.py
 python3 "$UPDATER"
