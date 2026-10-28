@@ -10,6 +10,7 @@ import unittest
 PATCHER = Path(__file__).resolve().parents[1] / "heroku_policy_patch.py"
 
 FIXTURE_CONFIG = '''class Config:
+    OWNER_ID = 123456
     DISABLE_TORRENTS = False
     DISABLE_LEECH = False
     DISABLE_SEED = False
@@ -33,7 +34,7 @@ FIXTURE_CONFIG = '''class Config:
     RESOLVER_ENABLED = True
     RESOLVER_UI = True
     AUTHORIZED_CHATS = "-1001234567"
-    SUDO_USERS = "123456"
+    SUDO_USERS = "987654"
     BOT_MAX_TASKS = 0
     USER_MAX_TASKS = 0
     QUEUE_ALL = 0
@@ -55,22 +56,47 @@ FIXTURE_CONFIG = '''class Config:
             setattr(cls, key, value)
 '''
 
+FIXTURE_FILTERS = '''from pyrogram.filters import create
+from bot.core.config_manager import Config
+
+class CustomFilters:
+    async def authorized_user(self, _, update):
+        user = update.from_user or update.sender_chat
+        return bool(user and user.id == Config.OWNER_ID)
+
+    authorized = create(authorized_user)
+
+    async def sudo_user(self, _, update):
+        user = update.from_user or update.sender_chat
+        return bool(user and user.id == Config.OWNER_ID)
+
+    sudo = create(sudo_user)
+'''
+
 
 class HerokuPolicyPatchTests(unittest.TestCase):
     def _fixture(self, root):
         config_path = root / "bot" / "core" / "config_manager.py"
         config_path.parent.mkdir(parents=True)
         config_path.write_text(FIXTURE_CONFIG, encoding="utf-8")
-        (config_path.parent.parent / "__init__.py").write_text("", encoding="utf-8")
-        (config_path.parent / "__init__.py").write_text("", encoding="utf-8")
-        (config_path.parent.parent.parent / "__init__.py").write_text("", encoding="utf-8")
-        return config_path
+        filters_path = root / "bot" / "helper" / "telegram_helper" / "filters.py"
+        filters_path.parent.mkdir(parents=True)
+        filters_path.write_text(FIXTURE_FILTERS, encoding="utf-8")
+        for init_path in (
+            root / "bot" / "__init__.py",
+            root / "bot" / "core" / "__init__.py",
+            root / "bot" / "helper" / "__init__.py",
+            root / "bot" / "helper" / "telegram_helper" / "__init__.py",
+        ):
+            init_path.write_text("", encoding="utf-8")
+        return config_path, filters_path
 
     def test_no_patch_outside_heroku_mode(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            config_path = self._fixture(root)
-            before = config_path.read_text(encoding="utf-8")
+            config_path, filters_path = self._fixture(root)
+            before_config = config_path.read_text(encoding="utf-8")
+            before_filters = filters_path.read_text(encoding="utf-8")
             env = os.environ.copy()
             env.pop("DYNO", None)
             env["HEROKU_POLICY_MODE"] = "0"
@@ -83,12 +109,13 @@ class HerokuPolicyPatchTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(config_path.read_text(encoding="utf-8"), before)
+            self.assertEqual(config_path.read_text(encoding="utf-8"), before_config)
+            self.assertEqual(filters_path.read_text(encoding="utf-8"), before_filters)
 
-    def test_heroku_mode_patches_and_reapplies_guard_after_config_updates(self):
+    def test_heroku_mode_blocks_config_overrides_and_non_owner_access(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            config_path = self._fixture(root)
+            config_path, filters_path = self._fixture(root)
             env = os.environ.copy()
             env["DYNO"] = "web.1"
             env.pop("HEROKU_POLICY_MODE", None)
@@ -100,13 +127,31 @@ class HerokuPolicyPatchTests(unittest.TestCase):
                 text=True,
                 check=False,
             )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            patched_source = config_path.read_text(encoding="utf-8")
-            self.assertIn("BEGIN TELLY_HEROKU_POLICY_GUARD", patched_source)
-            compile(patched_source, str(config_path), "exec")
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+            patched_config = config_path.read_text(encoding="utf-8")
+            patched_filters = filters_path.read_text(encoding="utf-8")
+            self.assertIn("BEGIN TELLY_HEROKU_POLICY_GUARD", patched_config)
+            self.assertIn("BEGIN TELLY_HEROKU_OWNER_ONLY_AUTHORIZED_USER", patched_filters)
+            self.assertIn("BEGIN TELLY_HEROKU_OWNER_ONLY_SUDO_USER", patched_filters)
+            compile(patched_config, str(config_path), "exec")
+            compile(patched_filters, str(filters_path), "exec")
 
             check_code = r'''
+import asyncio
+import sys
+import types
+
+pyrogram = types.ModuleType("pyrogram")
+filters = types.ModuleType("pyrogram.filters")
+filters.create = lambda function: function
+pyrogram.filters = filters
+sys.modules["pyrogram"] = pyrogram
+sys.modules["pyrogram.filters"] = filters
+
 from bot.core.config_manager import Config
+from bot.helper.telegram_helper.filters import CustomFilters
+
 assert Config.DISABLE_TORRENTS is True
 assert Config.DISABLE_LEECH is True
 assert Config.DISABLE_SEED is True
@@ -115,6 +160,7 @@ assert Config.SEARCH_PLUGINS == []
 assert Config.RCLONE_SERVE_URL == ""
 assert Config.AUTHORIZED_CHATS == ""
 assert Config.BOT_MAX_TASKS == 1
+
 Config.load_dict({
     "DISABLE_TORRENTS": False,
     "DISABLE_LEECH": False,
@@ -131,10 +177,27 @@ assert Config.SEARCH_PLUGINS == []
 assert Config.RCLONE_SERVE_URL == ""
 assert Config.AUTHORIZED_CHATS == ""
 assert Config.BOT_MAX_TASKS == 1
+
 Config.set("DISABLE_TORRENTS", False)
 Config.set("AUTO_LEECH", True)
 assert Config.DISABLE_TORRENTS is True
 assert Config.AUTO_LEECH is False
+
+class Update:
+    def __init__(self, uid):
+        self.from_user = types.SimpleNamespace(id=uid)
+        self.sender_chat = None
+
+async def verify_owner_only():
+    instance = CustomFilters()
+    owner = Config.OWNER_ID
+    stranger = owner + 1
+    assert await instance.authorized_user(None, Update(owner))
+    assert not await instance.authorized_user(None, Update(stranger))
+    assert await instance.sudo_user(None, Update(owner))
+    assert not await instance.sudo_user(None, Update(stranger))
+
+asyncio.run(verify_owner_only())
 '''
             verify = subprocess.run(
                 [sys.executable, "-c", check_code],
