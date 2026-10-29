@@ -105,7 +105,7 @@ if UPSTREAM_REPO:
             ["git", "config", "--local", "user.email", "bot@tellyhouse.com"],
             check=True,
         )
-        srun(["git", "config", "--global", "user.name", "TellYBot"], check=True)
+        srun(["git", "config", "--local", "user.name", "TellYBot"], check=True)
         srun(["git", "remote", "add", "origin", UPSTREAM_REPO], check=True)
 
         # Fetch only the requested branch. The base image runs as non-root;
