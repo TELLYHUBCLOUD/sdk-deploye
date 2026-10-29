@@ -13,7 +13,7 @@ from logging import (
 from os import path, remove, environ, name as osname
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
-from subprocess import run as srun, call as scall
+from subprocess import run as srun
 
 getLogger("pymongo").setLevel(ERROR)
 
@@ -102,7 +102,7 @@ if UPSTREAM_REPO:
     try:
         srun(["git", "init", "-q"], check=True)
         srun(
-            ["git", "config", "--global", "user.email", "bot@tellyhouse.com"],
+            ["git", "config", "--local", "user.email", "bot@tellyhouse.com"],
             check=True,
         )
         srun(["git", "config", "--global", "user.name", "TellYBot"], check=True)
