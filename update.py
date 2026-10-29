@@ -135,7 +135,9 @@ if UPSTREAM_REPO:
     log_info(f"UPSTREAM_REPO: {sanitized_repo} | UPSTREAM_BRANCH: {UPSTREAM_BRANCH}")
 
 
-UPDATE_PKGS = config_file.get("UPDATE_PKGS", "True")
-if (isinstance(UPDATE_PKGS, str) and UPDATE_PKGS.lower() == "true") or UPDATE_PKGS:
-    scall("uv pip install -U -r requirements.txt", shell=True)
-    log_info("Successfully Updated all the Packages !")
+# Dependencies are pinned and installed during the Docker build. Avoid
+# mutating the runtime environment on every container start. Package upgrades
+# should be done by changing requirements.txt and rebuilding the image.
+UPDATE_PKGS = config_file.get("UPDATE_PKGS", "False")
+if (isinstance(UPDATE_PKGS, str) and UPDATE_PKGS.lower() == "true") or UPDATE_PKGS is True:
+    log_info("UPDATE_PKGS=true was requested, but runtime package upgrades are disabled in Docker mode; rebuild the image to change dependencies.")
