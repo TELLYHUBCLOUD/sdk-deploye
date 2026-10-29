@@ -108,18 +108,25 @@ if UPSTREAM_REPO:
         srun(["git", "config", "--global", "user.name", "TellYBot"], check=True)
         srun(["git", "remote", "add", "origin", UPSTREAM_REPO], check=True)
 
-        # Fetch attempt
-        fetch_res = srun(["git", "fetch", "origin", "-q"], env=update_env)
+        # Fetch only the requested branch. The base image runs as non-root;
+        # failures are non-fatal and the current checkout is kept intact.
+        fetch_res = srun(
+            ["git", "fetch", "origin", UPSTREAM_BRANCH, "-q"],
+            env=update_env,
+        )
 
         if fetch_res.returncode == 0:
-            srun(
-                ["git", "reset", "--hard", f"origin/{UPSTREAM_BRANCH}", "-q"],
-                check=True,
+            reset_res = srun(
+                ["git", "reset", "--hard", "FETCH_HEAD", "-q"],
+                env=update_env,
             )
-            log_info("Successfully updated with latest code!")
+            if reset_res.returncode == 0:
+                log_info("Successfully updated with latest code!")
+            else:
+                log_error("Fetched upstream but could not reset the working tree; continuing with current code.")
         else:
             log_error(
-                "Failed to fetch from Upstream. Incorrect token, branch, or repo URL?"
+                "Failed to fetch from Upstream. Check repository access, token, branch, or repo URL."
             )
             log_info("Continuing with existing code...")
     except Exception as e:
