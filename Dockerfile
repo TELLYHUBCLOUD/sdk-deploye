@@ -10,8 +10,9 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV UV_LINK_MODE=copy
 
+# Keep the requirements file in the image layer: the base image's non-root
+# build user may not own /tmp/sdk-requirements.txt and cannot safely remove it.
 RUN uv pip install --python /usr/src/app/.venv/bin/python --no-cache-dir -r /tmp/sdk-requirements.txt \
-    && rm -f /tmp/sdk-requirements.txt \
     && /usr/src/app/.venv/bin/python -c "import aiohttp, motor, pymongo; print('SDK Python dependencies OK')"
 
 # Copy the deploy wrapper last so the app tree in this repo is available.
