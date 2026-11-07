@@ -1,14 +1,21 @@
+
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
 
 cd /usr/src/app
 
 PYTHON="/usr/src/app/.venv/bin/python"
 
 if [[ ! -x "$PYTHON" ]]; then
-    echo "ERROR: base image virtualenv interpreter missing: $PYTHON" >&2
+    echo "ERROR: Python virtualenv interpreter missing: $PYTHON" >&2
     exit 1
 fi
 
-"$PYTHON" update.py
+echo "Python version:"
+"$PYTHON" --version
+
+echo "Running application updater..."
+"$PYTHON" /usr/src/app/update.py
+
+echo "Starting Telegram bot..."
 exec "$PYTHON" -m bot
