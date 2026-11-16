@@ -1,12 +1,11 @@
-
 FROM tellyhubcloud/telly-wzml:latest
 WORKDIR /usr/src/app
 
 COPY requirements.txt .
 
-# Existing venv ko clear karke recreate karo
-RUN uv venv --clear /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+# Create venv inside the owned working directory
+RUN uv venv --clear .venv
+ENV PATH="/usr/src/app/.venv/bin:$PATH"
 RUN uv pip install -r requirements.txt
 
 COPY . .
