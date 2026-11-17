@@ -1,6 +1,8 @@
 FROM tellyhubcloud/mltbsdk:latest
 
-WORKDIR /usr/src/app
+WORKDIR /app
+RUN chmod 777 /app
+
 COPY requirements.txt .
 RUN uv venv --clear /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
