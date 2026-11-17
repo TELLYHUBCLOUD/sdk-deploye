@@ -1,13 +1,15 @@
 FROM tellyhubcloud/telly-wzml:latest
-WORKDIR /usr/src/app
+
+WORKDIR /app
+RUN chmod 777 /app
 
 COPY requirements.txt .
-
-# Create venv inside the owned working directory
-RUN uv venv --clear .venv
-ENV PATH="/usr/src/app/.venv/bin:$PATH"
-RUN uv pip install -r requirements.txt
-
+RUN uv venv --clear /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+RUN uv pip install --no-cache-dir -r requirements.txt
 COPY . .
 
+RUN find . -maxdepth 1 -type f -name "*.sh" -exec sed -i 's/\r$//' {} +
+
+# Start application
 CMD ["bash", "start.sh"]
